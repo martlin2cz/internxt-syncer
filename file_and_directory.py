@@ -1,15 +1,17 @@
 from dataclasses import dataclass
 import os
-
-
-@dataclass
-class CloudFile:
-    id: str
-    path: os.path
-
+from typing import Optional
 
 @dataclass
-class CloudDirectory:
-    id: str
-    path: os.path
+class Resource:
+    id: Optional[str]
+    path: Optional[os.path]
+
+@dataclass
+class File(Resource):
+    pass
+
+@dataclass
+class Directory(Resource):
+    pass
 

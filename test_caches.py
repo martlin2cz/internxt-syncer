@@ -1,6 +1,6 @@
 import unittest
 import os
-from file_and_directory import CloudFile, CloudDirectory
+from file_and_directory import File, Directory
 from caches import SqliteCache, SQLITE_CACHE_FILE_NAME, InMemoryCache
 
 
@@ -15,7 +15,7 @@ class TestSqliteCache(unittest.TestCase):
         os.remove(SQLITE_CACHE_FILE_NAME)
 
     def test_store_and_get_file(self):
-        file = CloudFile(id="42", path='/lorem/foo_file.txt')
+        file = File(id="42", path='/lorem/foo_file.txt')
         self.cache.store_file(file)
 
         retrieved_file = self.cache.get_file('/lorem/foo_file.txt')
@@ -25,7 +25,7 @@ class TestSqliteCache(unittest.TestCase):
         self.assertEqual(retrieved_file.path, file.path)
 
     def test_store_and_get_directory(self):
-        directory = CloudDirectory(id="43", path='/ipsum/bar_directory')
+        directory = Directory(id="43", path='/ipsum/bar_directory')
         self.cache.store_directory(directory)
 
         retrieved_directory = self.cache.get_directory('/ipsum/bar_directory')
@@ -42,7 +42,7 @@ class TestInMemoryCache(unittest.TestCase):
         cls.cache = InMemoryCache()
 
     def test_store_and_get_file(self):
-        file = CloudFile(id="42", path='/lorem/foo_file.txt')
+        file = File(id="42", path='/lorem/foo_file.txt')
         self.cache.store_file(file)
 
         retrieved_file = self.cache.get_file('/lorem/foo_file.txt')
@@ -52,7 +52,7 @@ class TestInMemoryCache(unittest.TestCase):
         self.assertEqual(retrieved_file.path, file.path)
 
     def test_store_and_get_directory(self):
-        directory = CloudDirectory(id="43", path='/ipsum/bar_directory')
+        directory = Directory(id="43", path='/ipsum/bar_directory')
         self.cache.store_directory(directory)
 
         retrieved_directory = self.cache.get_directory('/ipsum/bar_directory')
