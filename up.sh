@@ -44,17 +44,17 @@ function create_directory() {
 		echo "No record of parent directory $parent_path" >&2
 		echo "$path" >> $ERRORS_FILE
 		echo "$parent_path" >> "$ERRORS_FILE"
-		exit 1
+		return 1
 	fi
 		
-	response=$($INTERNXT_CLI create-folder $COMMON_FLAGS --id=$parent_dir_id --name $name)
+	response=$($INTERNXT_CLI create-folder $COMMON_FLAGS --id "$parent_dir_id" --name "$name")
 	id=$(echo "$response" | jq '.folder.uuid' | tr -d '\"')
 
 	if [ "$id" == "" ] ; then
 		echo "Directory $path creation failed!" >&2
 		echo "$path" >> $ERRORS_FILE
 		echo "$response" >> $ERRORS_FILE
-		exit 2
+		return 2
 	else
 		record_new_directory "$path" "$name" "$id"
 	fi
@@ -72,17 +72,17 @@ function upload_file() {
 		echo "No record of parent directory $parent_path" >&2
 		echo "$path" >> $ERRORS_FILE
 		echo "$parent_path" >> "$ERRORS_FILE"
-		exit 1
+		return 1
 	fi
 		
-	response=$($INTERNXT_CLI upload-file $COMMON_FLAGS --destination=$parent_dir_id --file $path)
+	response=$($INTERNXT_CLI upload-file $COMMON_FLAGS --destination "$parent_dir_id" --file "$path")
 	id=$(echo "$response" | jq '.file.uuid' | tr -d '\"')
 
 	if [ "$id" == "" ] ; then
 		echo "File $path upload failed!" >&2
 		echo "$path" >> $ERRORS_FILE
 		echo "$response" >> $ERRORS_FILE
-		exit 2
+		return 2
 	fi
 }
 
@@ -119,6 +119,5 @@ upload_whole $ROOT_DIR_PATH
 #create_dir "$ROOT_DIR_PATH"
 #create_dir "foo/bar"
 #set +x
-
 
 
