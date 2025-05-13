@@ -1,7 +1,12 @@
+import sqlite3
+import sys
+import tempfile
 import unittest
 import os
+from unittest import TestCase
+
 from file_and_directory import File, Directory
-from caches import SqliteCache, SQLITE_CACHE_FILE_NAME, InMemoryCache
+from caches import SqliteCache, SQLITE_CACHE_FILE_NAME, InMemoryCache, SqliteTableHelper
 
 
 class TestSqliteCache(unittest.TestCase):
@@ -60,6 +65,46 @@ class TestInMemoryCache(unittest.TestCase):
 
         self.assertEqual(retrieved_directory.id, directory.id)
         self.assertEqual(retrieved_directory.path, directory.path)
+
+
+
+class TestSqliteTableHelper(TestCase):
+
+    def test_foo(self):
+        tmp_dir = tempfile.TemporaryDirectory(prefix="foo_db_sqlite")
+        file = os.path.join(tmp_dir.name, "foo.db.sqlite")
+        conn = sqlite3.connect(file)
+        with conn:
+            helper = SqliteTableHelper(conn,"Foo", {
+                "name": "TEXT",
+                "number": "INTEGER"
+            })
+
+            helper.insert_into({"name": "lorem", "number": 421})
+            helper.insert_into({"name": "ipsum", "number": 422})
+
+            helper.update_in({"number": 420}, "name = ?", ["lorem"])
+            helper.update_in({"name": "IPSUM"}, "name = ?", ["ipsum"])
+
+            self.assertEqual(
+            [
+                    {"name": "lorem", "number": 420},
+                    {"name": "IPSUM", "number": 422}
+                ],
+                helper.select_from())
+
+            self.assertEqual(
+            [],
+                 helper.select_from("name = ?", ["ipsum"]))
+
+            self.assertEqual({"name": "lorem", "number": 420}, helper.select_one("name = ?", ["lorem"]))
+
+            try:
+                helper.select_one("name = ?", ["DOLOR"])
+            except ValueError as ex:
+                self.assertTrue(ex is not None)
+
+        conn.close()
 
 
 if __name__ == '__main__':
