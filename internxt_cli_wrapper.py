@@ -47,6 +47,12 @@ class InternxtCliWrapper:
     def upload_file(self, owner_dir_id: str, file_path: Path) -> object:
         return self._execute("upload-file", "--destination", owner_dir_id, "--file", file_path)
 
+    def download_file(self, file_id: str, destination_directory_path: Path, override: bool) -> object:
+        if override:
+            return self._execute("download-file", "--directory", destination_directory_path, "--id", file_id, "--override")
+        else:
+            return self._execute("download-file", "--directory", destination_directory_path, "--id", file_id)
+
 
     # TODO and more ...
 
@@ -64,6 +70,9 @@ class Cloud:
     def upload_file(self, owner_dir_id: str, file_path: Path) -> str:
         pass
 
+    def download_file(self, file_id: str, destination_directory_path: Path) -> Path:
+        pass
+
     # TODO and more ...
 
 
@@ -78,8 +87,8 @@ class InternxtCloud(Cloud):
 
     def list_directories(self, owner_dir_id: str) -> DirectoryContents:
         response = self.wrapper.list_directories_in(owner_dir_id)
-        directories = {fe['uuid']: fe['plainName'] for fe in response['list']['folders']}
-        files = {fe['uuid']: fe['plainName'] for fe in response['list']['files']}
+        directories = {fe['uuid']: self.file_name(fe, 'plainName', None) for fe in response['list']['folders']}
+        files = {fe['uuid']: self.file_name(fe, 'plainName', 'type') for fe in response['list']['files']}
         return DirectoryContents(directories, files)
 
     def create_directory(self, owner_dir_id: str, dir_name: str) -> str:
@@ -90,7 +99,21 @@ class InternxtCloud(Cloud):
         response = self.wrapper.upload_file(owner_dir_id, file_path)
         return response['file']['uuid']
 
+    def download_file(self, file_id: str, destination_directory_path: Path) -> Path:
+        response = self.wrapper.download_file(file_id, destination_directory_path, False)
+        name = self.file_name(response['file'], 'name', 'type')
+        return Path(destination_directory_path, name)
+
     # TODO and more ...
+    @classmethod
+    def file_name(cls, file_object: object, base_name_key: str, extension_key: str | None):
+        base_name = file_object[base_name_key] if base_name_key else None
+        extension = file_object[extension_key] if extension_key else None
+        if extension is None:
+            return base_name
+        else:
+            return f"{base_name}.{extension}"
+
 
 
 class MockedInMemoryCloud:
@@ -134,6 +157,16 @@ class MockedInMemoryCloud:
         self.files_names[new_file_id] = file_path.name
         self.directories_child_files[owner_dir_id].append(new_file_id)
         return new_file_id
+
+    def download_file(self, file_id: str, destination_directory_path: Path) -> Path:
+        file_name = self.files_names[file_id]
+        destination_path = Path(destination_directory_path, file_name)
+        fake_contents = f"{file_id}={file_name}"
+
+        with open(destination_path, "w") as handle:
+            handle.write(fake_contents)
+
+        return Path(destination_directory_path, file_name)
 
     # TODO and more ...
 
