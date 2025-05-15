@@ -8,6 +8,7 @@ from typing import List, Dict
 from caches import Cache
 from file_and_directory import File, Directory
 
+
 @dataclass(frozen=True)
 class DirectoryContents:
     directories: List[str]
@@ -43,6 +44,10 @@ class InternxtCliWrapper:
     def create_directory(self, owner_dir_id: str, dir_name: str) -> object:
         return self._execute("create-folder", "--id", owner_dir_id, "--name", dir_name)
 
+    def upload_file(self, owner_dir_id: str, file_path: Path) -> object:
+        return self._execute("upload-file", "--destination", owner_dir_id, "--file", file_path)
+
+
     # TODO and more ...
 
 
@@ -54,6 +59,9 @@ class Cloud:
         pass
 
     def create_directory(self, owner_dir_id: str, dir_name: str) -> str:
+        pass
+
+    def upload_file(self, owner_dir_id: str, file_path: Path) -> str:
         pass
 
     # TODO and more ...
@@ -77,6 +85,10 @@ class InternxtCloud(Cloud):
     def create_directory(self, owner_dir_id: str, dir_name: str) -> str:
         response = self.wrapper.create_directory(owner_dir_id, dir_name)
         return response['folder']['uuid']
+
+    def upload_file(self, owner_dir_id: str, file_path: Path) -> str:
+        response = self.wrapper.upload_file(owner_dir_id, file_path)
+        return response['file']['uuid']
 
     # TODO and more ...
 
@@ -105,5 +117,16 @@ class MockedInMemoryCloud:
 
         return child_dir_id
 
+    def upload_file(self, owner_dir_id: str, file_path: Path) -> str:
+        self.previous_id += 1
+        new_file_id = str(self.previous_id)
+
+        self.files[owner_dir_id].append(new_file_id)
+        return new_file_id
+
     # TODO and more ...
+
+    def __str__(self):
+        return f"[directories={self.directories}, files={self.files}]"
+
 
