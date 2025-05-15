@@ -22,7 +22,7 @@ class TestInternxtCliWrapper(TestCase):
         print(result)
 
     def test_create_directory(self):
-        result = self.wrapper.create_directory(TESTING_ROOT_DIR_ID, "foo-10")
+        result = self.wrapper.create_directory(TESTING_ROOT_DIR_ID, "foo-11")
         print(result)
 
     def test_upload_file(self):
@@ -46,7 +46,7 @@ class TestInternxtCloud(TestCase):
         self.assertTrue(len(contents.directories) > 0)
 
     def test_create_directory(self):
-        dir_id = self.cloud.create_directory(TESTING_ROOT_DIR_ID, "bar-10")
+        dir_id = self.cloud.create_directory(TESTING_ROOT_DIR_ID, "bar-11")
         print(dir_id)
         self.assertIsNotNone(dir_id)
 
@@ -69,20 +69,20 @@ class TestMockedInMemoryCloud(TestCase):
         cls.cloud.set_root_directory(cls.root_dir_id)
 
     def test_create_directory(self):
-        dir_id = self.cloud.create_directory(self.root_dir_id, "baz-10")
+        dir_id = self.cloud.create_directory(self.root_dir_id, "baz-11")
         print(dir_id)
         self.assertIsNotNone(dir_id)
-
-    def test_list_directories(self):
-        contents = self.cloud.list_directories(self.root_dir_id)
-        print(contents)
-        self.assertTrue(len(contents.directories) > 0)
 
     def test_upload_file(self):
         file = NamedTemporaryFile(prefix="inmemory-cloud").name
         file_id = self.cloud.upload_file(self.root_dir_id, Path(file))
         print(file_id)
         self.assertIsNotNone(file_id)
+
+    def test_list_directories(self):
+        contents = self.cloud.list_directories(self.root_dir_id)
+        print(contents)
+        self.assertTrue(len(contents.directories) > 0)
 
 
 if __name__ == '__main__':

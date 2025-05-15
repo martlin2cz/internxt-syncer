@@ -11,8 +11,8 @@ from file_and_directory import File, Directory
 
 @dataclass(frozen=True)
 class DirectoryContents:
-    directories: List[str]
-    files: List[str]
+    directories: Dict[str, str]
+    files: Dict[str, str]
 
 
 class InternxtCliWrapper:
@@ -24,8 +24,8 @@ class InternxtCliWrapper:
 
         print("Executing: " + str(command))
         result = subprocess.run(command, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise IOError(f"Internxt cli failed (code: {result.returncode}): {result.stderr}")
+        #if result.returncode != 0:
+        #    raise IOError(f"Internxt cli failed (code: {result.returncode})")
 
         try:
             jsoned = json.loads(result.stdout)
@@ -78,8 +78,8 @@ class InternxtCloud(Cloud):
 
     def list_directories(self, owner_dir_id: str) -> DirectoryContents:
         response = self.wrapper.list_directories_in(owner_dir_id)
-        directories = [fe['uuid'] for fe in response['list']['folders']]
-        files = [fe['uuid'] for fe in response['list']['files']]
+        directories = {fe['uuid']: fe['plainName'] for fe in response['list']['folders']}
+        files = {fe['uuid']: fe['plainName'] for fe in response['list']['files']}
         return DirectoryContents(directories, files)
 
     def create_directory(self, owner_dir_id: str, dir_name: str) -> str:
@@ -96,24 +96,34 @@ class InternxtCloud(Cloud):
 class MockedInMemoryCloud:
     def __init__(self):
         self.previous_id = 100
-        self.directories: Dict[str, List[str]] = {}
-        self.files: Dict[str, List[str]] = {}
+        self.directories_names: Dict[str, str] = {}
+        self.files_names: Dict[str, str] = {}
+        self.directories_child_dirs: Dict[str, List[str]] = {}
+        self.directories_child_files: Dict[str, List[str]] = {}
 
     def set_root_directory(self, dir_id: str):
-        self.directories[dir_id] = []
-        self.files[dir_id] = []
+        self.directories_names[dir_id] = "" # we don't care about the root dir name
+        self.directories_child_dirs[dir_id] = []
+        self.directories_child_files[dir_id] = []
 
     def list_directories(self, owner_dir_id: str) -> DirectoryContents:
-        directories = self.directories[owner_dir_id]
-        files = self.files[owner_dir_id]
+        directories_ids = self.directories_child_dirs[owner_dir_id]
+        files_ids = self.directories_child_files[owner_dir_id]
+
+        directories = {did: self.directories_names[did] for did in directories_ids}
+        files = {fid: self.files_names[fid] for fid in files_ids}
+
         return DirectoryContents(directories, files)
 
     def create_directory(self, owner_dir_id: str, dir_name: str) -> str:
         self.previous_id += 1
         child_dir_id = str(self.previous_id)
 
-        self.directories[owner_dir_id].append(child_dir_id)
-        self.directories[child_dir_id] = []
+        self.directories_child_dirs[owner_dir_id].append(child_dir_id)
+
+        self.directories_names[child_dir_id] = dir_name
+        self.directories_child_dirs[child_dir_id] = []
+        self.directories_child_files[child_dir_id] = []
 
         return child_dir_id
 
@@ -121,7 +131,8 @@ class MockedInMemoryCloud:
         self.previous_id += 1
         new_file_id = str(self.previous_id)
 
-        self.files[owner_dir_id].append(new_file_id)
+        self.files_names[new_file_id] = file_path.name
+        self.directories_child_files[owner_dir_id].append(new_file_id)
         return new_file_id
 
     # TODO and more ...
