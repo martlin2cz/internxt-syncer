@@ -47,7 +47,7 @@ class TestInternxtCloud(TestCase):
         cls.cloud.set_root_directory(TESTING_ROOT_DIR_ID)
 
     def test_list_directories(self):
-        contents = self.cloud.list_directories(TESTING_ROOT_DIR_ID)
+        contents = self.cloud.list_directory(TESTING_ROOT_DIR_ID)
         print(contents)
         self.assertTrue(len(contents.directories) > 0)
 

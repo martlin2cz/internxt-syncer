@@ -9,28 +9,35 @@ SQLITE_CACHE_FILE_NAME = "cache.sqlite"
 
 
 class Cache(abc.ABC):
+    """
+    The cache of the directories and files in the cloud.
+    """
 
     def store_file(self, file: File):
+        """ Saves info about the given file into the cache. """
         pass
 
     def store_directory(self, directory: Directory):
+        """ Saves info about the given directory into the cache. """
         pass
 
     def get_file(self, path: str) -> File:
+        """ Retrieves the info about the file with the given path. """
         pass
 
     def get_directory(self, path: str) -> Directory:
+        """ Retrieves the info about the directory with the given path. """
         pass
 
 
-SQLITE_CACHE_FILE_NAME = "cache.sqlite3"
-
-
 class SqliteTableHelper:
+    """ The helper tool for the sqlite table manipulation. Encapsulates the SQL quering by nicer convience methods. """
+
     conn: sqlite3.Connection
     table_name: str
 
     def __init__(self, connection: sqlite3.Connection, table_name: str, table_def: Dict[str, str]):
+        """ Creates the helper for the sqlite3 connection, working with table with given name and attributes. """
         self.conn = connection
 
         self.table_name = table_name
@@ -39,6 +46,8 @@ class SqliteTableHelper:
         self.create_table(table_def)
 
     def create_table(self, table_def):
+        """ Creates the table. Internal. """
+
         with self.conn:
             table_def_strs = [f"{col_name} {col_declaration}" for col_name, col_declaration in table_def.items()]
             table_def_str = f"({', '.join(table_def_strs)})"
@@ -46,6 +55,8 @@ class SqliteTableHelper:
             self.conn.execute(sql)
 
     def insert_into(self, data: Dict[str, str]):
+        """ Inserts given data into the table. """
+
         with self.conn:
             values = tuple(data.values())
             values_placeholders = ["?" for value in self.table_columns_names]
@@ -57,6 +68,8 @@ class SqliteTableHelper:
             self.conn.execute(sql, values)
 
     def update_in(self, new_data: Dict[str, any], where_statement: str, where_values: List[any]):
+        """ Updates the data in the table to the given ones based on the condition. """
+
         with self.conn:
             values = tuple(new_data.values())
             assigned_columns_names = new_data.keys()
@@ -68,12 +81,15 @@ class SqliteTableHelper:
             sql_values = [*values, *where_values]
             self.conn.execute(sql, sql_values)
 
-    def select_from(self, where_statement: str = None, where_values: List[any] = None):
+    def select_from(self, where_statement: str = None, where_values: List[any] = None) -> List[Dict[str, any]]:
+        """ Selects the records from the table (optionally only those matcing the criteria). """
+
         with self.conn:
             cursor = self._do_select(where_statement, where_values)
             return [self._tuple_to_dict(record) for record in cursor.fetchall()]
 
     def select_one(self, where_statement: str = None, where_values: List[any] = None):
+        """ Retrieves one and only one record form the table. """
         with self.conn:
             cursor = self._do_select(where_statement, where_values)
             fetched = cursor.fetchmany(2)
@@ -101,6 +117,7 @@ class SqliteTableHelper:
 
 
 class SqliteCache(Cache):
+    """ The implementation of Cache, which stores persistently into the sqlite3 database. """
 
     def __init__(self):
         self.conn = sqlite3.connect(SQLITE_CACHE_FILE_NAME)
@@ -132,6 +149,8 @@ class SqliteCache(Cache):
 
 
 class InMemoryCache(Cache):
+    """ The In-Memory implementation of the cache. """
+
     def __init__(self):
         self.files = []
         self.directories = []

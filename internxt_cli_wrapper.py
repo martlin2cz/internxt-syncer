@@ -11,11 +11,16 @@ from file_and_directory import File, Directory
 
 @dataclass(frozen=True)
 class DirectoryContents:
+    """ The helper data structure holding contentns of the directory: a list of child directories and files,
+    with thier ids and names. """
+
     directories: Dict[str, str]
     files: Dict[str, str]
 
 
 class InternxtCliWrapper:
+    """ The helper tool for the manipulation with the internxt cli. Encapsulates the actual CLI app. """
+
     EXECUTABLE = ["node", str(Path.home().absolute()) + "/AppData/Roaming/npm/node_modules/\\@internxt/cli/bin/run.js"]
     COMMON_ARGS = ["--json", "--non-interactive"]
 
@@ -39,15 +44,19 @@ class InternxtCliWrapper:
         return jsoned
 
     def list_directories_in(self, owner_dir_id: str) -> object:
+        """ Executed the 'list' command. """
         return self._execute("list", "--id", owner_dir_id)
 
     def create_directory(self, owner_dir_id: str, dir_name: str) -> object:
+        """ Executed the 'create-folder' command. """
         return self._execute("create-folder", "--id", owner_dir_id, "--name", dir_name)
 
     def upload_file(self, owner_dir_id: str, file_path: Path) -> object:
+        """ Executed the 'upload-file' command. """
         return self._execute("upload-file", "--destination", owner_dir_id, "--file", file_path)
 
     def download_file(self, file_id: str, destination_directory_path: Path, override: bool) -> object:
+        """ Executed the 'download-file' command. """
         if override:
             return self._execute("download-file", "--directory", destination_directory_path, "--id", file_id, "--override")
         else:
@@ -58,25 +67,33 @@ class InternxtCliWrapper:
 
 
 class Cloud:
+    """ The abstract Cloud storage implementation. """
+
     def set_root_directory(self, dir_id: str):
+        """ Specifies and remembers the root directory."""
         pass
 
-    def list_directories(self, owner_dir_id: str) -> DirectoryContents:
+    def list_directory(self, owner_dir_id: str) -> DirectoryContents:
+        """ Lists the contents of the specified dictionary. """
         pass
 
     def create_directory(self, owner_dir_id: str, dir_name: str) -> str:
+        """ Creates new dictionary. """
         pass
 
     def upload_file(self, owner_dir_id: str, file_path: Path) -> str:
+        """ Uploads the specified file. """
         pass
 
     def download_file(self, file_id: str, destination_directory_path: Path) -> Path:
+        """ Downloads the specified file. """
         pass
 
     # TODO and more ...
 
 
 class InternxtCloud(Cloud):
+    """ The Cloud implemented based on the InternxtCliWrapper. """
 
     def __init__(self, cache: Cache):
         self.wrapper = InternxtCliWrapper()
@@ -85,7 +102,7 @@ class InternxtCloud(Cloud):
     def set_root_directory(self, dir_id: str):
         pass
 
-    def list_directories(self, owner_dir_id: str) -> DirectoryContents:
+    def list_directory(self, owner_dir_id: str) -> DirectoryContents:
         response = self.wrapper.list_directories_in(owner_dir_id)
         directories = {fe['uuid']: self.file_name(fe, 'plainName', None) for fe in response['list']['folders']}
         files = {fe['uuid']: self.file_name(fe, 'plainName', 'type') for fe in response['list']['files']}
@@ -115,8 +132,9 @@ class InternxtCloud(Cloud):
             return f"{base_name}.{extension}"
 
 
-
 class MockedInMemoryCloud:
+    """ The "mocked", in-memory Cloud implementation. Limited, but usefull for testing purposes."""
+
     def __init__(self):
         self.previous_id = 100
         self.directories_names: Dict[str, str] = {}
@@ -171,6 +189,6 @@ class MockedInMemoryCloud:
     # TODO and more ...
 
     def __str__(self):
-        return f"[directories={self.directories}, files={self.files}]"
+        return f"[directories={self.directories_names}, files={self.files_names}]"
 
 
