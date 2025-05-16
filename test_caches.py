@@ -1,74 +1,89 @@
+import abc
 import sqlite3
 import sys
 import tempfile
 import unittest
 import os
+from pathlib import Path
 from unittest import TestCase
 
 from file_and_directory import File, Directory
-from caches import SqliteCache, SQLITE_CACHE_FILE_NAME, InMemoryCache, SqliteTableHelper
+from caches import SqliteCache, SQLITE_CACHE_FILE_NAME, InMemoryCache, SqliteTableHelper, Cache
 
 
-class TestSqliteCache(unittest.TestCase):
+class AbstractCacheTestCase(unittest.TestCase):
+
     @classmethod
     def setUpClass(cls):
-        cls.cache = SqliteCache()
+        cls.cache = cls.construct_cache_instance()
 
     @classmethod
     def tearDownClass(cls):
-        cls.cache.disconect()
-        os.remove(SQLITE_CACHE_FILE_NAME)
+        cls.terminate_cache_instance(cls.cache)
 
-    def test_store_and_get_file(self):
-        file = File(id="42", path='/lorem/foo_file.txt')
-        self.cache.store_file(file)
+    def test_1_store_file_id(self):
+        self.cache.store_file_id(Path("foo", "bar.txt"), "111")
+        self.cache.store_file_id(Path("foo", "bar.txt"), "112")
 
-        retrieved_file = self.cache.get_file('/lorem/foo_file.txt')
-        self.assertIsNotNone(retrieved_file)
+    def test_2_store_file_path(self):
+        self.cache.store_file_path(Path("baz", "aux.txt"), "120")
+        self.cache.store_file_path(Path("baz", "AUX.txt"), "120")
 
-        self.assertEqual(retrieved_file.id, file.id)
-        self.assertEqual(retrieved_file.path, file.path)
+    def test_3_store_directory_id(self):
+        self.cache.store_directory_id(Path("lorem", "ipsum"), "211")
+        self.cache.store_directory_id(Path("lorem", "ipsum"), "212")
 
-    def test_store_and_get_directory(self):
-        directory = Directory(id="43", path='/ipsum/bar_directory')
-        self.cache.store_directory(directory)
+    def test_4_store_directory_path(self):
+        self.cache.store_directory_path(Path("dolor", "sit"), "220")
+        self.cache.store_directory_path(Path("dolor", "SIT"), "220")
 
-        retrieved_directory = self.cache.get_directory('/ipsum/bar_directory')
-        self.assertIsNotNone(retrieved_directory)
+    def test_5_get_file_id(self):
+        self.assertEqual("112", self.cache.get_file_id(Path("foo", "bar.txt")))
+        #self.assertEqual(None, self.cache.get_file_id(Path("whatever")))
 
-        self.assertEqual(retrieved_directory.id, directory.id)
-        self.assertEqual(retrieved_directory.path, directory.path)
+    def test_6_get_file_path(self):
+        self.assertEqual(Path("baz", "AUX.txt"), self.cache.get_file_path("120"))
+        #self.assertEqual(None, self.cache.get_file_path("whatever"))
 
+    def test_7_get_directory_id(self):
+        self.assertEqual("212", self.cache.get_directory_id(Path("lorem", "ipsum")))
+        #self.assertEqual(None, self.cache.get_directory_id(Path("whatever")))
 
-class TestInMemoryCache(unittest.TestCase):
+    def test_8_get_directory_path(self):
+        self.assertEqual(Path("dolor", "SIT"), self.cache.get_directory_path("220"))
+        #self.assertEqual(None, self.cache.get_directory_path("whatever"))
 
     @classmethod
-    def setUpClass(cls):
-        cls.cache = InMemoryCache()
+    def construct_cache_instance(cls) -> Cache:
+        pass
 
-    def test_store_and_get_file(self):
-        file = File(id="42", path='/lorem/foo_file.txt')
-        self.cache.store_file(file)
-
-        retrieved_file = self.cache.get_file('/lorem/foo_file.txt')
-        self.assertIsNotNone(retrieved_file)
-
-        self.assertEqual(retrieved_file.id, file.id)
-        self.assertEqual(retrieved_file.path, file.path)
-
-    def test_store_and_get_directory(self):
-        directory = Directory(id="43", path='/ipsum/bar_directory')
-        self.cache.store_directory(directory)
-
-        retrieved_directory = self.cache.get_directory('/ipsum/bar_directory')
-        self.assertIsNotNone(retrieved_directory)
-
-        self.assertEqual(retrieved_directory.id, directory.id)
-        self.assertEqual(retrieved_directory.path, directory.path)
+    @classmethod
+    def terminate_cache_instance(cls, cache: Cache):
+        pass
 
 
+class TestSqliteCache(AbstractCacheTestCase):
+    @classmethod
+    def construct_cache_instance(cls) -> SqliteCache:
+        return SqliteCache()
 
-class TestSqliteTableHelper(TestCase):
+    @classmethod
+    def terminate_cache_instance(cls, cache: SqliteCache):
+        cache.disconect()
+        os.remove(SQLITE_CACHE_FILE_NAME)
+
+
+class TestInMemoryCache(AbstractCacheTestCase):
+    @classmethod
+    def construct_cache_instance(cls) -> InMemoryCache:
+        return InMemoryCache()
+
+    @classmethod
+    def terminate_cache_instance(cls, cache: InMemoryCache):
+        pass
+
+
+class TestSqliteTableHelper(unittest.TestCase):
 
     def test_foo(self):
         tmp_dir = tempfile.TemporaryDirectory(prefix="foo_db_sqlite")
@@ -99,13 +114,12 @@ class TestSqliteTableHelper(TestCase):
 
             self.assertEqual({"name": "lorem", "number": 420}, helper.select_one("name = ?", ["lorem"]))
 
-            try:
-                helper.select_one("name = ?", ["DOLOR"])
-            except ValueError as ex:
-                self.assertTrue(ex is not None)
+            self.assertIsNone(helper.select_one("name = ?", ["DOLOR"]))
 
         conn.close()
 
+
+del AbstractCacheTestCase
 
 if __name__ == '__main__':
     unittest.main()

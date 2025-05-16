@@ -1,6 +1,7 @@
 import dataclasses
 import sqlite3
 import abc
+from pathlib import Path
 from typing import Dict, List, Union, Tuple
 
 from file_and_directory import File, Directory
@@ -13,20 +14,36 @@ class Cache(abc.ABC):
     The cache of the directories and files in the cloud.
     """
 
-    def store_file(self, file: File):
-        """ Saves info about the given file into the cache. """
+    def store_file_id(self, file_path: Path, file_id: str):
+        """ Saves the id of the file identified by the path. """
         pass
 
-    def store_directory(self, directory: Directory):
-        """ Saves info about the given directory into the cache. """
+    def store_file_path(self, file_path: Path, file_id: str):
+        """ Saves the path of the file identified by the id. """
         pass
 
-    def get_file(self, path: str) -> File:
-        """ Retrieves the info about the file with the given path. """
+    def store_directory_id(self, directory_path: Path, directory_id: str):
+        """ Saves the id of the directory identified by the path. """
         pass
 
-    def get_directory(self, path: str) -> Directory:
-        """ Retrieves the info about the directory with the given path. """
+    def store_directory_path(self, directory_path: Path, directory_id: str):
+        """ Saves the path of the file identified by the id. """
+        pass
+
+    def get_file_id(self, file_path: Path) -> str:
+        """ Retrieves the id of the file with the specified path. """
+        pass
+
+    def get_file_path(self, file_id: str) -> Path:
+        """ Retrieves the path of the file with the specified id. """
+        pass
+
+    def get_directory_id(self, directory_path: Path) -> str:
+        """ Retrieves the id of the directory with the specified path. """
+        pass
+
+    def get_directory_path(self, directory_id: str) -> Path:
+        """ Retrieves the path of the directory with the specified id. """
         pass
 
 
@@ -93,10 +110,12 @@ class SqliteTableHelper:
         with self.conn:
             cursor = self._do_select(where_statement, where_values)
             fetched = cursor.fetchmany(2)
-            if len(fetched) != 1:
+            if len(fetched) == 0:
+                return None
+            elif len(fetched) == 1:
+                return self._tuple_to_dict(fetched[0])
+            else:
                 raise ValueError("Not one record matching: " + str(fetched))
-
-            return self._tuple_to_dict(fetched[0])
 
     def _do_select(self, where_statement, where_values):
         columns_str = f"{', '.join(self.table_columns_names)}"
@@ -122,47 +141,93 @@ class SqliteCache(Cache):
     def __init__(self):
         self.conn = sqlite3.connect(SQLITE_CACHE_FILE_NAME)
         self.fileTableHelper = SqliteTableHelper(self.conn, "File", {
-            "id": "TEXT PRIMARY KEY",
-            "path": "TEXT UNIQUE"
+            "id": "TEXT",
+            "path": "TEXT"
         })
         self.directoryTableHelper = SqliteTableHelper(self.conn, "Directory", {
-            "id": "TEXT PRIMARY KEY",
-            "path": "TEXT UNIQUE"
+            "id": "TEXT",
+            "path": "TEXT"
         })
 
     def disconect(self):
         self.conn.close()
 
-    def store_file(self, file: File):
-        self.fileTableHelper.insert_into(file.__dict__)
+    def _create_or_update(self, helper: SqliteTableHelper, condition_colum: str, condition_value: any, set_column: str, set_value: any):
+        where = f"{condition_colum} = ?"
+        where_values = [condition_value]
+        existing_record = helper.select_one(where, where_values)
 
-    def store_directory(self, directory: Directory):
-        self.directoryTableHelper.insert_into(directory.__dict__)
+        if existing_record:
+            update_data = {set_column: set_value}
+            helper.update_in(update_data, where, where_values)
+        else:
+            insert_data = {condition_colum: condition_value, set_column: set_value}
+            helper.insert_into(insert_data)
 
-    def get_file(self, path: str) -> File:
-        dicted = self.fileTableHelper.select_one("path = ?", [path])
-        return File(**dicted)
+    def _get_value(self, helper: SqliteTableHelper, condition_colum: str, condition_value: any, get_column: str):
+        where = f"{condition_colum} = ?"
+        where_values = [condition_value]
+        record = helper.select_one(where, where_values)
 
-    def get_directory(self, path: str) -> Directory:
-        dicted = self.directoryTableHelper.select_one("path = ?", [path])
-        return Directory(**dicted)
+        if record:
+            return record[get_column]
+        else:
+            return None
+
+    def store_file_id(self, file_path: Path, file_id: str):
+        self._create_or_update(self.fileTableHelper, 'path', str(file_path), 'id', file_id)
+
+    def store_file_path(self, file_path: Path, file_id: str):
+        self._create_or_update(self.fileTableHelper, 'id', file_id,'path', str(file_path))
+
+    def store_directory_id(self, directory_path: Path, directory_id: str):
+        self._create_or_update(self.directoryTableHelper, 'path', str(directory_path), 'id', directory_id)
+
+    def store_directory_path(self, directory_path: Path, directory_id: str):
+        self._create_or_update(self.directoryTableHelper,  'id', directory_id,'path', str(directory_path))
+
+    def get_file_id(self, file_path: Path) -> str:
+        return self._get_value(self.fileTableHelper, 'path', str(file_path), 'id')
+
+    def get_file_path(self, file_id: str) -> Path:
+        return Path(self._get_value(self.fileTableHelper, 'id', file_id, 'path'))
+
+    def get_directory_id(self, directory_path: Path) -> str:
+        return self._get_value(self.directoryTableHelper, 'path', str(directory_path), 'id')
+
+    def get_directory_path(self, directory_id: str) -> Path:
+        return Path(self._get_value(self.directoryTableHelper, 'id', directory_id, 'path'))
 
 
 class InMemoryCache(Cache):
     """ The In-Memory implementation of the cache. """
 
     def __init__(self):
-        self.files = []
-        self.directories = []
+        self.files_ids = {}
+        self.files_paths = {}
+        self.directories_ids = {}
+        self.directories_paths = {}
 
-    def store_file(self, file: File):
-        self.files.append(file)
+    def store_file_id(self, file_path: Path, file_id: str):
+        self.files_ids[str(file_path)] = file_id
 
-    def store_directory(self, directory: Directory):
-        self.directories.append(directory)
+    def store_file_path(self, file_path: Path, file_id: str):
+        self.files_paths[file_id] = str(file_path)
 
-    def get_file(self, path: str) -> File:
-        return [file for file in self.files if file.path == path][0]
+    def store_directory_id(self, directory_path: Path, directory_id: str):
+        self.directories_ids[str(directory_path)] = directory_id
 
-    def get_directory(self, path: str) -> Directory:
-        return [directory for directory in self.directories if directory.path == path][0]
+    def store_directory_path(self, directory_path: Path, directory_id: str):
+        self.directories_paths[directory_id] = str(directory_path)
+
+    def get_file_id(self, file_path: Path) -> str:
+        return self.files_ids[str(file_path)]
+
+    def get_file_path(self, file_id: str) -> Path:
+        return Path(self.files_paths[file_id])
+
+    def get_directory_id(self, directory_path: Path) -> str:
+        return self.directories_ids[str(directory_path)]
+
+    def get_directory_path(self, directory_id: str) -> Path:
+        return Path(self.directories_paths[directory_id])
