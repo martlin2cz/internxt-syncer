@@ -76,9 +76,9 @@ class SqliteTableHelper:
 
         with self.conn:
             values = tuple(data.values())
-            values_placeholders = ["?" for value in self.table_columns_names]
+            values_placeholders = ["?" for value in data.values()]
 
-            columns_names_str = f"({', '.join(self.table_columns_names)})"
+            columns_names_str = f"({', '.join(data.keys())})"
             values_placeholders_str = f"({', '.join(values_placeholders)})"
 
             sql = f"INSERT INTO {self.table_name} {columns_names_str} VALUES {values_placeholders_str}"
