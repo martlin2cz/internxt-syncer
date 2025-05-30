@@ -3,7 +3,7 @@ import subprocess
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from caches import Cache
 from file_and_directory import File, Directory
@@ -123,7 +123,7 @@ class InternxtCloud(Cloud):
 
     # TODO and more ...
     @classmethod
-    def file_name(cls, file_object: object, base_name_key: str, extension_key: str | None):
+    def file_name(cls, file_object: object, base_name_key: str, extension_key: Optional[str]):
         base_name = file_object[base_name_key] if base_name_key else None
         extension = file_object[extension_key] if extension_key else None
         if extension is None:

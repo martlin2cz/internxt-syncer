@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import os
+from pathlib import Path
 from typing import Optional
 
 
@@ -8,7 +9,7 @@ class Resource:
     """ The common abstract file system resource."""
 
     id: Optional[str]
-    path: Optional[os.path]
+    path: Optional[Path]
 
 
 @dataclass
