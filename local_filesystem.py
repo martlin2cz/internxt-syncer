@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Union, List
 import os
 
@@ -12,8 +13,8 @@ class LocalFileSystem:
     def load(self, root: os.path) -> List[Union[File, Directory]]:
         logger.info(f"Loading contents of a directory {root}")
         result = []
-        for (root,dirs,files) in os.walk(root):
-            dir_path = root
+        for (sub_root,dirs,files) in os.walk(root):
+            dir_path = Path(sub_root)
             dir_id = None
 
             directory = Directory(dir_id, dir_path)
@@ -21,7 +22,7 @@ class LocalFileSystem:
             logger.debug(f"Found directory {dir_path}")
 
             for file in files:
-                file_path = os.path.join(root, file)
+                file_path = Path(sub_root, file)
                 file_id = None
 
                 file = File(file_id, file_path)

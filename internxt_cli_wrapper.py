@@ -29,7 +29,8 @@ class DirectoryContents:
 class InternxtCliWrapper:
     """ The helper tool for the manipulation with the internxt cli. Encapsulates the actual CLI app. """
 
-    EXECUTABLE = ["node", str(Path.home().absolute()) + "/AppData/Roaming/npm/node_modules/\\@internxt/cli/bin/run.js"]
+    EXECUTABLE = ["node", str(Path.home().absolute()) + "/apps/nodejs/node-v18.12.1-linux-x64/lib/node_modules/@internxt/cli/bin/run.js"]
+    #EXECUTABLE = ["node", str(Path.home().absolute()) + "/AppData/Roaming/npm/node_modules/\\@internxt/cli/bin/run.js"]
     COMMON_ARGS = ["--json", "--non-interactive"]
 
     def _execute(self, command_name, *command_args) -> object:
