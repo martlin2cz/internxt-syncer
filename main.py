@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import logging
 
 import argparse
@@ -32,3 +33,18 @@ def main():
     cache_update.update(ROOT_DIR_ID)
 
 
+=======
+from pathlib import Path
+
+from operations import CacheUpdate, SimpleUpload
+
+ROOT_DIR_ID = "f3f79de4-0895-43e5-81ef-9ae91b19254c"
+ROOT_DIR_PATH = Path(".")
+
+if __name__ == '__main__':
+    cache_update = CacheUpdate()
+    cache_update.update(ROOT_DIR_ID)
+
+    upload = SimpleUpload()
+    upload.upload(ROOT_DIR_PATH, ROOT_DIR_ID)
+>>>>>>> Initial uploader (not owrking)
