@@ -5,8 +5,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Optional
 
+import logging
+
 from caches import Cache
 from file_and_directory import File, Directory
+
+INTXT_CLI_WRAPPER_LOGGER_NAME = "intxtcli"
+intxt_cli_logger = logging.getLogger(INTXT_CLI_WRAPPER_LOGGER_NAME)
+
+CLOUD_LOGGER_NAME = "cloud"
+cloud_logger = logging.getLogger(CLOUD_LOGGER_NAME)
 
 
 @dataclass(frozen=True)
@@ -27,7 +35,7 @@ class InternxtCliWrapper:
     def _execute(self, command_name, *command_args) -> object:
         command = self.EXECUTABLE + [command_name] + self.COMMON_ARGS + list(command_args)
 
-        print("Executing: " + str(command))
+        intxt_cli_logger.debug(f"Executing: {command}")
         result = subprocess.run(command, capture_output=True, text=True)
         #if result.returncode != 0:
         #    raise IOError(f"Internxt cli failed (code: {result.returncode})")
@@ -37,6 +45,8 @@ class InternxtCliWrapper:
         except json.JSONDecodeError as e:
             raise IOError(f"Failed to parse Internxt cli output: {e}")
 
+        intxt_cli_logger.debug(f"Responded: {jsoned}")
+
         if 'success' not in jsoned or not jsoned['success']:
             message = jsoned['message'] if 'message' in jsoned else "[unspecified]"
             raise IOError(f"The command {command_name} responded with no-success: {message}")
@@ -45,18 +55,22 @@ class InternxtCliWrapper:
 
     def list_directories_in(self, owner_dir_id: str) -> object:
         """ Executed the 'list' command. """
+        intxt_cli_logger.info(f"Listing directories in {owner_dir_id}")
         return self._execute("list", "--id", owner_dir_id)
 
     def create_directory(self, owner_dir_id: str, dir_name: str) -> object:
         """ Executed the 'create-folder' command. """
+        intxt_cli_logger.info(f"Creating directory in {dir_name} with owner {owner_dir_id}")
         return self._execute("create-folder", "--id", owner_dir_id, "--name", dir_name)
 
     def upload_file(self, owner_dir_id: str, file_path: Path) -> object:
         """ Executed the 'upload-file' command. """
+        intxt_cli_logger.info(f"Uploading file {file_path} into {owner_dir_id}")
         return self._execute("upload-file", "--destination", owner_dir_id, "--file", file_path)
 
     def download_file(self, file_id: str, destination_directory_path: Path, override: bool) -> object:
         """ Executed the 'download-file' command. """
+        intxt_cli_logger.info(f"Downloading file {file_id} into {destination_directory_path}")
         if override:
             return self._execute("download-file", "--directory", destination_directory_path, "--id", file_id, "--override")
         else:
@@ -103,20 +117,24 @@ class InternxtCloud(Cloud):
         pass
 
     def list_directory(self, owner_dir_id: str) -> DirectoryContents:
+        cloud_logger.debug(f"Listing directory contents of {owner_dir_id}")
         response = self.wrapper.list_directories_in(owner_dir_id)
         directories = {fe['uuid']: self.file_name(fe, 'plainName', None) for fe in response['list']['folders']}
         files = {fe['uuid']: self.file_name(fe, 'plainName', 'type') for fe in response['list']['files']}
         return DirectoryContents(directories, files)
 
     def create_directory(self, owner_dir_id: str, dir_name: str) -> str:
+        cloud_logger.debug(f"Creating directory {dir_name} in {owner_dir_id}")
         response = self.wrapper.create_directory(owner_dir_id, dir_name)
         return response['folder']['uuid']
 
     def upload_file(self, owner_dir_id: str, file_path: Path) -> str:
+        cloud_logger.debug(f"Uploading file {file_path} to {owner_dir_id}")
         response = self.wrapper.upload_file(owner_dir_id, file_path)
         return response['file']['uuid']
 
     def download_file(self, file_id: str, destination_directory_path: Path) -> Path:
+        cloud_logger.debug(f"Downloading file {file_id} to {destination_directory_path}")
         response = self.wrapper.download_file(file_id, destination_directory_path, False)
         name = self.file_name(response['file'], 'name', 'type')
         return Path(destination_directory_path, name)
@@ -148,6 +166,7 @@ class MockedInMemoryCloud:
         self.directories_child_files[dir_id] = []
 
     def list_directories(self, owner_dir_id: str) -> DirectoryContents:
+        cloud_logger.debug(f"Mock listing directory contents of {owner_dir_id}")
         directories_ids = self.directories_child_dirs[owner_dir_id]
         files_ids = self.directories_child_files[owner_dir_id]
 
@@ -157,6 +176,7 @@ class MockedInMemoryCloud:
         return DirectoryContents(directories, files)
 
     def create_directory(self, owner_dir_id: str, dir_name: str) -> str:
+        cloud_logger.debug(f"Mock creating directory {dir_name} in {owner_dir_id}")
         self.previous_id += 1
         child_dir_id = str(self.previous_id)
 
@@ -169,6 +189,7 @@ class MockedInMemoryCloud:
         return child_dir_id
 
     def upload_file(self, owner_dir_id: str, file_path: Path) -> str:
+        cloud_logger.debug(f"Mock uploading file {file_path} to {owner_dir_id}")
         self.previous_id += 1
         new_file_id = str(self.previous_id)
 
@@ -177,6 +198,7 @@ class MockedInMemoryCloud:
         return new_file_id
 
     def download_file(self, file_id: str, destination_directory_path: Path) -> Path:
+        cloud_logger.debug(f"Mock downloading file {file_id} to {destination_directory_path}")
         file_name = self.files_names[file_id]
         destination_path = Path(destination_directory_path, file_name)
         fake_contents = f"{file_id}={file_name}"

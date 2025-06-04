@@ -1,9 +1,11 @@
 from unittest import TestCase
 from os import path
 
+from configure_logging import configure_logging
 from file_and_directory import Directory, File
 from local_filesystem import LocalFileSystem
 
+configure_logging("debug")
 
 class TestLocalFileSystem(TestCase):
     def test_load(self):

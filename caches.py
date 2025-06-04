@@ -4,9 +4,18 @@ import abc
 from pathlib import Path
 from typing import Dict, List, Union, Tuple
 
+import logging
+
 from file_and_directory import File, Directory
 
 SQLITE_CACHE_FILE_NAME = "cache.sqlite"
+
+# logging
+CACHE_LOGGER_NAME = "cache"
+cache_logger = logging.getLogger(CACHE_LOGGER_NAME)
+
+SQLITE_HELPER_LOGGER_NAME = "sqlhelper"
+sqlite_logger = logging.getLogger(SQLITE_HELPER_LOGGER_NAME)
 
 
 class Cache(abc.ABC):
@@ -69,6 +78,7 @@ class SqliteTableHelper:
             table_def_strs = [f"{col_name} {col_declaration}" for col_name, col_declaration in table_def.items()]
             table_def_str = f"({', '.join(table_def_strs)})"
             sql = f"CREATE TABLE IF NOT EXISTS  {self.table_name} {table_def_str}"
+            sqlite_logger.info(f"Creating table: {sql}")
             self.conn.execute(sql)
 
     def insert_into(self, data: Dict[str, str]):
@@ -82,6 +92,7 @@ class SqliteTableHelper:
             values_placeholders_str = f"({', '.join(values_placeholders)})"
 
             sql = f"INSERT INTO {self.table_name} {columns_names_str} VALUES {values_placeholders_str}"
+            sqlite_logger.info(f"Inserting: {sql} values: {values}")
             self.conn.execute(sql, values)
 
     def update_in(self, new_data: Dict[str, any], where_statement: str, where_values: List[any]):
@@ -96,6 +107,7 @@ class SqliteTableHelper:
 
             sql = f"UPDATE {self.table_name} SET {columns_assignments_str} WHERE {where_statement}"
             sql_values = [*values, *where_values]
+            sqlite_logger.info(f"Updating: {sql} values {sql_values}")
             self.conn.execute(sql, sql_values)
 
     def select_from(self, where_statement: str = None, where_values: List[any] = None) -> List[Dict[str, any]]:
@@ -122,10 +134,12 @@ class SqliteTableHelper:
 
         if where_statement is None:
             sql = f"SELECT {columns_str} FROM {self.table_name}"
+            sqlite_logger.info(f"Selecting: {sql}")
             return self.conn.execute(sql)
         else:
             args = where_values if where_values is not None else []
             sql = f"SELECT {columns_str} FROM {self.table_name} WHERE {where_statement}"
+            sqlite_logger.info(f"Selecting: {sql}, args: {args}")
             return self.conn.execute(sql, args)
 
     def _tuple_to_dict(self, values: Tuple[any]):
@@ -159,9 +173,11 @@ class SqliteCache(Cache):
 
         if existing_record:
             update_data = {set_column: set_value}
+            cache_logger.debug(f"Setting {update_data} where {where} is {where_values}")
             helper.update_in(update_data, where, where_values)
         else:
             insert_data = {condition_colum: condition_value, set_column: set_value}
+            cache_logger.debug(f"Creating {insert_data}")
             helper.insert_into(insert_data)
 
     def _get_value(self, helper: SqliteTableHelper, condition_colum: str, condition_value: any, get_column: str):
@@ -175,27 +191,35 @@ class SqliteCache(Cache):
             return None
 
     def store_file_id(self, file_path: Path, file_id: str):
+        cache_logger.info(f"Storing file id {file_id} for path {file_path}")
         self._create_or_update(self.fileTableHelper, 'path', str(file_path), 'id', file_id)
 
     def store_file_path(self, file_path: Path, file_id: str):
+        cache_logger.info(f"Storing file path {file_path} for id {file_id}")
         self._create_or_update(self.fileTableHelper, 'id', file_id,'path', str(file_path))
 
     def store_directory_id(self, directory_path: Path, directory_id: str):
+        cache_logger.info(f"Storing directory id {directory_id} for path {directory_path}")
         self._create_or_update(self.directoryTableHelper, 'path', str(directory_path), 'id', directory_id)
 
     def store_directory_path(self, directory_path: Path, directory_id: str):
+        cache_logger.info(f"Storing file path {directory_path} for id {directory_id}")
         self._create_or_update(self.directoryTableHelper,  'id', directory_id,'path', str(directory_path))
 
     def get_file_id(self, file_path: Path) -> str:
+        cache_logger.info(f"Getting file id for path {file_path}")
         return self._get_value(self.fileTableHelper, 'path', str(file_path), 'id')
 
     def get_file_path(self, file_id: str) -> Path:
+        cache_logger.info(f"Getting file path for path {file_id}")
         return Path(self._get_value(self.fileTableHelper, 'id', file_id, 'path'))
 
     def get_directory_id(self, directory_path: Path) -> str:
+        cache_logger.info(f"Getting directory id for path {directory_path}")
         return self._get_value(self.directoryTableHelper, 'path', str(directory_path), 'id')
 
     def get_directory_path(self, directory_id: str) -> Path:
+        cache_logger.info(f"Getting directory path for path {directory_id}")
         return Path(self._get_value(self.directoryTableHelper, 'id', directory_id, 'path'))
 
 
@@ -209,25 +233,33 @@ class InMemoryCache(Cache):
         self.directories_paths = {}
 
     def store_file_id(self, file_path: Path, file_id: str):
+        cache_logger.info(f"Storing file id {file_id} for path {file_path}")
         self.files_ids[str(file_path)] = file_id
 
     def store_file_path(self, file_path: Path, file_id: str):
+        cache_logger.info(f"Storing file path {file_path} for id {file_id}")
         self.files_paths[file_id] = str(file_path)
 
     def store_directory_id(self, directory_path: Path, directory_id: str):
+        cache_logger.info(f"Storing directory id {directory_id} for path {directory_path}")
         self.directories_ids[str(directory_path)] = directory_id
 
     def store_directory_path(self, directory_path: Path, directory_id: str):
+        cache_logger.info(f"Storing file path {directory_path} for id {directory_id}")
         self.directories_paths[directory_id] = str(directory_path)
 
     def get_file_id(self, file_path: Path) -> str:
+        cache_logger.info(f"Getting file id for path {file_path}")
         return self.files_ids[str(file_path)]
 
     def get_file_path(self, file_id: str) -> Path:
+        cache_logger.info(f"Getting file path for path {file_id}")
         return Path(self.files_paths[file_id])
 
     def get_directory_id(self, directory_path: Path) -> str:
+        cache_logger.info(f"Getting directory id for path {directory_path}")
         return self.directories_ids[str(directory_path)]
 
     def get_directory_path(self, directory_id: str) -> Path:
+        cache_logger.info(f"Getting directory path for path {directory_id}")
         return Path(self.directories_paths[directory_id])

@@ -7,10 +7,14 @@ from tempfile import NamedTemporaryFile
 from unittest import TestCase
 
 from caches import InMemoryCache
+from configure_logging import configure_logging
 from internxt_cli_wrapper import InternxtCliWrapper, InternxtCloud, MockedInMemoryCloud
 
 TESTING_ROOT_DIR_ID = "d0ed08d0-3e88-461b-9e67-13befc4f0e89"
 TESTING_FILE_ID = "b9857eb9-9397-4cdd-aeed-54d519e330fe"
+
+configure_logging("debug")
+
 
 class TestInternxtCliWrapper(TestCase):
 

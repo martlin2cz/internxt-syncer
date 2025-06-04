@@ -7,8 +7,11 @@ import os
 from pathlib import Path
 from unittest import TestCase
 
+from configure_logging import configure_logging
 from file_and_directory import File, Directory
 from caches import SqliteCache, SQLITE_CACHE_FILE_NAME, InMemoryCache, SqliteTableHelper, Cache
+
+configure_logging("debug")
 
 
 class AbstractCacheTestCase(unittest.TestCase):
