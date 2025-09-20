@@ -297,14 +297,15 @@ function download_directory_recursivelly() {
 ########################################################################################################################
 # command line arguments processing
 
-if [ "$#" != "2" ] || [ "$0" == "-h" ] || [ "$0" == "--help" ] ; then
-	echo "Usage: $0 [ROOT_DIR_SERVER_ID] [ROOT_DIR_LOCAL_PATH]"
-	echo "for example $0 '3454-332d-34ad-444b' ~/stuff/something"
+if [ "$#" != "3" ] || [ "$0" == "-h" ] || [ "$0" == "--help" ] ; then
+	echo "Usage: $0 [up|down] [ROOT_DIR_SERVER_ID] [ROOT_DIR_LOCAL_PATH]"
+	echo "for example $0 up '3454-332d-34ad-444b' ~/stuff/something"
 	exit
 fi
 
-ROOT_DIR_SERVER_ID=$1
-ROOT_DIR_LOCAL_PATH=$2
+ACTION=$1
+ROOT_DIR_SERVER_ID=$2
+ROOT_DIR_LOCAL_PATH=$3
 
 if ! [[ "$ROOT_DIR_SERVER_ID" =~ ^([0-9a-f]{4,}\-){4,}([0-9a-f]{4,})$ ]] ; then
   echo "$ROOT_DIR_SERVER_ID doesn't seem to be valid server uuid." >&2
@@ -316,7 +317,19 @@ if [ ! -d "$ROOT_DIR_LOCAL_PATH" ] ; then
 	exit 12
 fi
 
-download_directory_recursivelly "$ROOT_DIR_LOCAL_PATH" "$ROOT_DIR_SERVER_ID"
-echo "Download completed, see $ROOT_DIR_LOCAL_PATH"
+case $ACTION in
+  up|upload)
+    dir_id=$(upload_directory_recursivelly "$ROOT_DIR_LOCAL_PATH" "$ROOT_DIR_SERVER_ID")
+    echo "Upload completed, see ${INTERNXT_DRIVE_URL}/folder/$dir_id"
+    ;;
+  down|download)
+    download_directory_recursivelly "$ROOT_DIR_LOCAL_PATH" "$ROOT_DIR_SERVER_ID"
+    echo "Download completed, see $ROOT_DIR_LOCAL_PATH"
+    ;;
+  *)
+  echo "Unknown action $ACTION. Use either 'up/upload' or 'down/download'" >&2
+	exit 13
+	;;
+esac
 
 ########################################################################################################################
