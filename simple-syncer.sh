@@ -15,6 +15,9 @@ INTERNXT_CLI="${INTERNXT_CLI:-internxt}"
 # the common flags to the cli command
 COMMON_FLAGS="--non-interactive --json"
 
+# the location of the internxt cli drive
+INTERNXT_DRIVE_URL="https://drive.internxt.com"
+
 ########################################################################################################################
 # logging
 
@@ -61,6 +64,7 @@ ERROR_CODE_SESSION_EXPIRED=101
 ERROR_CODE_DIRECTORY_ALREADY_EXIST=111
 ERROR_CODE_FILE_ALREADY_EXIST=121
 ERROR_CODE_FILE_IS_EMPTY=122
+ERROR_CODE_NO_ID=150
 
 # Detects the kind of error in the code.
 function detect_error_code() {
@@ -113,9 +117,116 @@ function check_for_error() {
   return "$error_code"
 }
 
+#########################################################################################################################
+# UPLOADING
+
+# Creates specified directory on the server. Stdouts new directory id, returns error code.
+function do_create_directory() {
+	local path=$1
+	local owner_dir_id=$2
+
+	local name="$(basename "$path")"
+	log "$path" "CREATING DIRECTORY $name in $owner_dir_id ..."
+
+	local response=$(exec_cli_command "$path" create-folder --id "$owner_dir_id" --name "$name")
+	local error_code=$?
+	if [ $error_code != 0 ] ; then
+	  return $error_code
+	fi
+
+	local id=$(echo "$response" | jq '.folder.uuid' | tr -d '\"')
+
+	if [ -z "$id"  ] || [ "$id" == "null" ] ; then
+		log "$path" "ERROR ($ERROR_CODE_NO_ID): NO ID recieved for DIRECTORY!"
+		return $ERROR_CODE_NO_ID
+	else
+		log "$path" "CREATED DIRECTORY with id $id!"
+		echo "$id"
+		return 0
+	fi
+}
+
+function do_upload_file() {
+	local path=$1
+	local owner_dir_id=$2
+
+	local name="$(basename "$path")"
+	log "$path" "UPLOADING FILE $name into $owner_dir_id ..."
+
+	local response=$(exec_cli_command "$path" upload-file --destination "$owner_dir_id" --file "$path")
+	local error_code=$?
+	if [ $error_code != 0 ] ; then
+	  return $error_code
+	fi
+
+	local id=$(echo "$response" | jq '.file.uuid' | tr -d '\"')
+
+	if [ -z "$id"  ] || [ "$id" == "null" ] ; then
+		log "$path" "ERROR ($ERROR_CODE_NO_ID): NO ID recieved for FILE!"
+		return $ERROR_CODE_NO_ID
+	else
+		log "$path" "UPLOADED FILE with id $id!"
+		echo "$id"
+		return 0
+	fi
+}
+
+# Walks recursivelly the local directory tree and uploads its contents to the specified server directory.
+# Recursive. Echoes the processed directory id, returns 0 if succeeds at bit or ERROR_CODE_NO_ID if fails totally.
+function upload_directory_recursivelly() {
+	local dir_path=$1
+	local owner_dir_id=$2
+
+	local dir_name=$(basename "$dir_path")
+	log "$dir_path" "Uploading directory $dir_path as child of server dir $owner_dir_id ..."
+
+	local dir_id=$(do_create_directory "$dir_path" "$owner_dir_id")
+  if [ -z "$dir_id" ] ; then
+    log "$dir_path" "Cannot upload because I don't know the server id. Skipping."
+    return $ERROR_CODE_NO_ID
+  fi
+
+	find "$dir_path" -mindepth 1 -maxdepth 1 | while read resource_path ; do
+		debug_log "$resource_path" "processing ..."
+
+		local server_id=""
+		if [ -d "$resource_path" ] ; then
+			server_id=$(upload_directory_recursivelly "$resource_path" "$dir_id")
+		else
+			server_id=$(do_upload_file "$resource_path" "$dir_id")
+		fi
+
+		debug_log "$resource_path" "processed (recieved id $server_id)!"
+	done
+
+	log "$dir_path" "Uploaded directory into $owner_dir_id!"
+	echo "$dir_id"
+	return 0
+}
 
 ########################################################################################################################
-# hell world
+# command line arguments processing
 
-response=$(exec_cli_command "." "whoami")
-echo "$response" | jq ".login.user.email"
+if [ "$#" != "2" ] || [ "$0" == "-h" ] || [ "$0" == "--help" ] ; then
+	echo "Usage: $0 [ROOT_DIR_SERVER_ID] [ROOT_DIR_LOCAL_PATH]"
+	echo "for example $0 '3454-332d-34ad-444b' ~/stuff/something"
+	exit
+fi
+
+ROOT_DIR_SERVER_ID=$1
+ROOT_DIR_LOCAL_PATH=$2
+
+if ! [[ "$ROOT_DIR_SERVER_ID" =~ ^([0-9a-f]{4,}\-){4,}([0-9a-f]{4,})$ ]] ; then
+  echo "$ROOT_DIR_SERVER_ID doesn't seem to be valid server uuid." >&2
+	exit 11
+fi
+
+if [ ! -d "$ROOT_DIR_LOCAL_PATH" ] ; then
+	echo "$ROOT_DIR_LOCAL_PATH directory doesn't exist." >&2
+	exit 12
+fi
+
+dir_id=$(upload_directory_recursivelly "$ROOT_DIR_LOCAL_PATH" "$ROOT_DIR_SERVER_ID")
+echo "Upload completed, see ${INTERNXT_DRIVE_URL}/folder/$dir_id"
+
+########################################################################################################################
