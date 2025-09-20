@@ -204,6 +204,96 @@ function upload_directory_recursivelly() {
 	return 0
 }
 
+
+#########################################################################################################################
+# DOWNLOADING
+
+# Downloads the specified file. Echoes its path (if suceeded), returns error code.
+function do_download_file() {
+  local file_id=$1
+  local owner_dir_path=$2
+  local file_info=$3
+
+  debug_log "$owner_dir_path/???" "downloading server file $file_log"
+  local base_file_name=$(echo "$file_info" | jq ".plainName" | tr -d '\"')
+  local file_type=$(echo "$file_info" | jq ".type" | tr -d '\"')
+
+  local file_name=""
+  if [ -z "$file_type" ] || [ "$file_type" == "null" ] ; then
+    file_name="$base_file_name"
+  else
+    file_name="$base_file_name.$file_type"
+  fi
+
+  local file_path="$owner_dir_path/$file_name"
+  log "$file_path" "DOWNLOADING FILE $file_name for $file_id ..."
+
+  local response=$(exec_cli_command "$file_path" download-file "--id=$file_id" "--directory=$owner_dir_path" "--overwrite")
+  local error_code=$?
+	if [ $error_code != 0 ] ; then
+	  return $error_code
+	fi
+
+  echo "$file_path"
+  log "$file_path" "DOWNLOADED FILE!"
+  return 0
+}
+
+# "Downloads" (creates new local directory) the specified directory. Echoes its path, returns error code.
+function do_download_directory_recursivelly() {
+  local dir_id=$1
+  local owner_dir_path=$2
+  local dir_info=$3
+
+  debug_log "$owner_dir_path/???" "downloading server directory $dir_log"
+
+  local dir_name=$(echo "$dir_info" | jq ".plainName" | tr -d '\"')
+  local dir_path="$owner_dir_path/$dir_name"
+
+  log "$dir_path" "CREATING $dir_name for $dir_id ..."
+
+  mkdir "$dir_path"
+  local error_code=$?
+	if [ $error_code != 0 ] ; then
+	  return $error_code
+	fi
+
+  echo "$dir_path"
+  log "$dir_path" "CREATED DIRECTORY!"
+}
+
+# Walks recursivelly the server directory structure and downloads all files and directories inside.
+# Echoes the nothing, returns 0 if some sucess or error code if unable to fetch directory contents.
+function download_directory_recursivelly() {
+  local dir_path=$1
+	local dir_id=$2
+
+  log "$dir_path" "Downloading contents of server directory $dir_id into $dir_path ..."
+  local directory_contents_response=$(exec_cli_command "$dir_path" list --id "$dir_id")
+  local error_code=$?
+	if [ $error_code != 0 ] ; then
+    log "$dir_path" "Cannot upload because I don't know contents of the directory. Skipping."
+	  return $error_code
+	fi
+
+  child_files_ids=$(echo "$directory_contents_response" | jq ".list.files[].uuid" | tr -d '\"')
+  for child_file_id in $child_files_ids; do
+      file_info=$(echo "$directory_contents_response" | jq ".list.files[] | select(.uuid==\"$child_file_id\")")
+      local x_file_id=$(do_download_file "$child_file_id" "$dir_path" "$file_info")
+  done
+
+  local child_dirs_ids=$(echo "$directory_contents_response" | jq ".list.folders[].uuid" | tr -d '\"')
+  for child_dir_id in $child_dirs_ids; do
+    local dir_info=$(echo "$directory_contents_response" | jq ".list.folders[] | select(.uuid==\"$child_dir_id\")")
+    local child_dir_path=$(do_download_directory_recursivelly "$child_dir_id" "$dir_path" "$dir_info")
+
+    download_directory_recursivelly "$child_dir_path" "$child_dir_id"
+  done
+
+  log "$dir_path" "Downloaded contents!"
+}
+
+
 ########################################################################################################################
 # command line arguments processing
 
@@ -226,7 +316,7 @@ if [ ! -d "$ROOT_DIR_LOCAL_PATH" ] ; then
 	exit 12
 fi
 
-dir_id=$(upload_directory_recursivelly "$ROOT_DIR_LOCAL_PATH" "$ROOT_DIR_SERVER_ID")
-echo "Upload completed, see ${INTERNXT_DRIVE_URL}/folder/$dir_id"
+download_directory_recursivelly "$ROOT_DIR_LOCAL_PATH" "$ROOT_DIR_SERVER_ID"
+echo "Download completed, see $ROOT_DIR_LOCAL_PATH"
 
 ########################################################################################################################
