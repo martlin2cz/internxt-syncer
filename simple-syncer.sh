@@ -55,7 +55,7 @@ function exec_cli_command() {
   echo "$response"
 
   check_for_error "$path" "$response"
-	error_code=$#
+	error_code=$?
 	return "$error_code"
 }
 
@@ -111,7 +111,7 @@ function check_for_error() {
   log "$path" "ERROR ($error_code): $message"
 
   if [ "$error_code" == "$ERROR_CODE_SESSION_EXPIRED" ] ; then
-    exit "$error_code"
+    return "$error_code"
   fi
 
   return "$error_code"
@@ -128,7 +128,8 @@ function do_create_directory() {
 	local name="$(basename "$path")"
 	log "$path" "CREATING DIRECTORY $name in $owner_dir_id ..."
 
-	local response=$(exec_cli_command "$path" create-folder --id "$owner_dir_id" --name "$name")
+  local response
+	response=$(exec_cli_command "$path" create-folder --id "$owner_dir_id" --name "$name")
 	local error_code=$?
 	if [ $error_code != 0 ] ; then
 	  return $error_code
@@ -153,7 +154,8 @@ function do_upload_file() {
 	local name="$(basename "$path")"
 	log "$path" "UPLOADING FILE $name into $owner_dir_id ..."
 
-	local response=$(exec_cli_command "$path" upload-file --destination "$owner_dir_id" --file "$path")
+  local response
+	response=$(exec_cli_command "$path" upload-file --destination "$owner_dir_id" --file "$path")
 	local error_code=$?
 	if [ $error_code != 0 ] ; then
 	  return $error_code
@@ -228,7 +230,9 @@ function do_download_file() {
   local file_path="$owner_dir_path/$file_name"
   log "$file_path" "DOWNLOADING FILE $file_name for $file_id ..."
 
-  local response=$(exec_cli_command "$file_path" download-file "--id=$file_id" "--directory=$owner_dir_path" "--overwrite")
+  local response
+  response=$(exec_cli_command "$file_path" download-file "--id=$file_id" "--directory=$owner_dir_path" "--overwrite")
+
   local error_code=$?
 	if [ $error_code != 0 ] ; then
 	  return $error_code
@@ -269,10 +273,12 @@ function download_directory_recursivelly() {
 	local dir_id=$2
 
   log "$dir_path" "Downloading contents of server directory $dir_id into $dir_path ..."
-  local directory_contents_response=$(exec_cli_command "$dir_path" list --id "$dir_id")
+  local directory_contents_response
+  directory_contents_response=$(exec_cli_command "$dir_path" list --id "$dir_id")
   local error_code=$?
+
 	if [ $error_code != 0 ] ; then
-    log "$dir_path" "Cannot upload because I don't know contents of the directory. Skipping."
+    log "$dir_path" "Cannot download because I don't know contents of the directory. Skipping."
 	  return $error_code
 	fi
 
@@ -320,11 +326,24 @@ fi
 case $ACTION in
   up|upload)
     dir_id=$(upload_directory_recursivelly "$ROOT_DIR_LOCAL_PATH" "$ROOT_DIR_SERVER_ID")
-    echo "Upload completed, see ${INTERNXT_DRIVE_URL}/folder/$dir_id"
+    error_code=$?
+    if [ "$error_code" == 0 ] ; then
+      echo "Upload completed, see ${INTERNXT_DRIVE_URL}/folder/$dir_id"
+    else
+      echo "Upload failed or incomplete."
+      exit 21
+    fi
+
     ;;
   down|download)
     download_directory_recursivelly "$ROOT_DIR_LOCAL_PATH" "$ROOT_DIR_SERVER_ID"
-    echo "Download completed, see $ROOT_DIR_LOCAL_PATH"
+    error_code=$?
+    if [ "$error_code" == 0 ] ; then
+      echo "Download completed, see $ROOT_DIR_LOCAL_PATH"
+    else
+      echo "Download failed or incomplete."
+      exit 22
+    fi
     ;;
   *)
   echo "Unknown action $ACTION. Use either 'up/upload' or 'down/download'" >&2
