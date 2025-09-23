@@ -21,23 +21,77 @@ INTERNXT_DRIVE_URL="https://drive.internxt.com"
 ########################################################################################################################
 # logging
 
-function log() {
-	local path=$1; shift
-	local message=$*
-	timestamp=$(date)
+LOGGING_VERBOCITY="quiet" # "quiet", "simple", "verbose" or debug"
 
-	echo "$timestamp $path: $message" >> $LOGFILE
-	echo "$path: $message" >&2
+function log_to_file() {
+	local message=$*
+	local timestamp=$(date)
+
+	echo "$timestamp $message" >> $LOGFILE
 }
 
-function debug_log() {
-	local path=$1; shift
-	local message=$*
-	timestamp=$(date)
+function log_to_console() {
+	local args=$*
 
-	echo "$timestamp $path: $message" >> $LOGFILE
+	echo $args >&2
 }
 
+function log_to_console_nobreak() {
+	local args=$*
+
+	echo -n $args >&2
+}
+
+function log_debug() {
+  local path=$1; shift
+	local message=$*
+
+  if [ "$LOGGING_VERBOCITY" == "debug" ] ; then
+    log_to_file "$path: $message"
+  fi
+}
+
+function log_verbose() {
+  local path=$1; shift
+	local message=$*
+
+if [ "$LOGGING_VERBOCITY" == "debug" ] || [ "$LOGGING_VERBOCITY" == "verbose" ]; then
+    log_to_console "$path: $message"
+  fi
+
+  if [ "$LOGGING_VERBOCITY" == "debug" ] || [ "$LOGGING_VERBOCITY" == "verbose" ] || [ "$LOGGING_VERBOCITY" == "simple" ]; then
+    log_to_file "$path: $message"
+  fi
+}
+
+function log_simple_pre() {
+	local pre_message=$*
+
+  if [ "$LOGGING_VERBOCITY" == "simple" ]; then
+    log_to_console_nobreak "$pre_message .."
+  fi
+}
+
+function log_simple_post() {
+	local post_message=$*
+
+  if [ "$LOGGING_VERBOCITY" == "simple" ]; then
+    log_to_console ".. $post_message"
+  fi
+}
+
+function log_error_or_warning() {
+    local path=$1; shift
+  	local message=$*
+
+    log_to_file "$path: $message"
+
+    if [ "$LOGGING_VERBOCITY" == "simple" ]; then
+      log_to_console "$message"
+    else
+      log_to_console "$path" "$message"
+    fi
+}
 ########################################################################################################################
 # the internxt-cli wrappers and helpers
 
@@ -48,9 +102,9 @@ function exec_cli_command() {
   local command_name=$1; shift
   local args=("$@")
 
-  debug_log "$path" "$INTERNXT_CLI $command_name $COMMON_FLAGS" "${args[@]}"
+  log_debug "$path" "$INTERNXT_CLI $command_name $COMMON_FLAGS" "${args[@]}"
   response=$($INTERNXT_CLI $command_name $COMMON_FLAGS "${args[@]}")
-	debug_log "$path" "$response"
+	log_debug "$path" "$response"
 
   echo "$response"
 
@@ -104,16 +158,16 @@ function check_for_error() {
   local error_code=$(detect_error_code "$message")
 
   if [ "$error_code" == "$ERROR_CODE_DIRECTORY_ALREADY_EXIST" ] || [ "$error_code" == "$ERROR_CODE_FILE_ALREADY_EXIST" ]; then
-    log "$path" "WARNING ($error_code): $message"
+    log_error_or_warning "$path" "WARNING ($error_code): Already exist ($message)"
     return "$error_code"
   fi
-
-  log "$path" "ERROR ($error_code): $message"
 
   if [ "$error_code" == "$ERROR_CODE_SESSION_EXPIRED" ] ; then
+    log_error_or_warning "$path" "ERROR ($error_code): Session expired ($message)"
     return "$error_code"
   fi
 
+  log_error_or_warning "$path" "ERROR ($error_code): $message"
   return "$error_code"
 }
 
@@ -126,25 +180,27 @@ function do_create_directory() {
 	local owner_dir_id=$2
 
 	local name="$(basename "$path")"
-	log "$path" "CREATING DIRECTORY $name in $owner_dir_id ..."
+	log_verbose "$path" "CREATING DIRECTORY $name ON SERVER into $owner_dir_id directory ..."
 
   local response
 	response=$(exec_cli_command "$path" create-folder --id "$owner_dir_id" --name "$name")
+
 	local error_code=$?
 	if [ $error_code != 0 ] ; then
+	  # error/warning already logged
 	  return $error_code
 	fi
 
 	local id=$(echo "$response" | jq '.folder.uuid' | tr -d '\"')
 
 	if [ -z "$id"  ] || [ "$id" == "null" ] ; then
-		log "$path" "ERROR ($ERROR_CODE_NO_ID): NO ID recieved for DIRECTORY!"
+		log_verbose "$path" "ERROR ($ERROR_CODE_NO_ID): Did not recieve the server directory id."
 		return $ERROR_CODE_NO_ID
-	else
-		log "$path" "CREATED DIRECTORY with id $id!"
-		echo "$id"
-		return 0
-	fi
+  fi
+
+  log_verbose "$path" "CREATED DIRECTORY $name ON SERVER with id $id!"
+  echo "$id"
+  return 0
 }
 
 function do_upload_file() {
@@ -152,25 +208,27 @@ function do_upload_file() {
 	local owner_dir_id=$2
 
 	local name="$(basename "$path")"
-	log "$path" "UPLOADING FILE $name into $owner_dir_id ..."
+	log_verbose "$path" "UPLOADING FILE $name TO SERVER into $owner_dir_id directory ..."
 
   local response
 	response=$(exec_cli_command "$path" upload-file --destination "$owner_dir_id" --file "$path")
+
 	local error_code=$?
 	if [ $error_code != 0 ] ; then
+	  # error/warning already logged
 	  return $error_code
 	fi
 
 	local id=$(echo "$response" | jq '.file.uuid' | tr -d '\"')
 
 	if [ -z "$id"  ] || [ "$id" == "null" ] ; then
-		log "$path" "ERROR ($ERROR_CODE_NO_ID): NO ID recieved for FILE!"
+		log_verbose "$path" "ERROR ($ERROR_CODE_NO_ID): Did ton recieve the server file id."
 		return $ERROR_CODE_NO_ID
-	else
-		log "$path" "UPLOADED FILE with id $id!"
-		echo "$id"
-		return 0
-	fi
+  fi
+
+  log_verbose "$path" "UPLOADED FILE $name TO SERVER with id $id!"
+  echo "$id"
+  return 0
 }
 
 # Walks recursivelly the local directory tree and uploads its contents to the specified server directory.
@@ -180,28 +238,36 @@ function upload_directory_recursivelly() {
 	local owner_dir_id=$2
 
 	local dir_name=$(basename "$dir_path")
-	log "$dir_path" "Uploading directory $dir_path as child of server dir $owner_dir_id ..."
+	log_verbose "$dir_path" "PROCESSING DIRECTORY $dir_name to upload as child of $owner_dir_id ..."
 
 	local dir_id=$(do_create_directory "$dir_path" "$owner_dir_id")
   if [ -z "$dir_id" ] ; then
-    log "$dir_path" "Cannot upload because I don't know the server id. Skipping."
+    log_verbose "$dir_path" "Cannot upload because I don't know the server id of the directory. Skipping."
     return $ERROR_CODE_NO_ID
   fi
 
 	find "$dir_path" -mindepth 1 -maxdepth 1 | while read resource_path ; do
-		debug_log "$resource_path" "processing ..."
+		log_debug "$resource_path" "PROCESSING CHILD ELEMENT $resource_path ..."
 
 		local server_id=""
 		if [ -d "$resource_path" ] ; then
+		  log_simple_pre "$resource_path"
+		  log_simple_post ":"
+
 			server_id=$(upload_directory_recursivelly "$resource_path" "$dir_id")
+
+			log_simple_pre "$resource_path"
+			log_simple_post "$server_id"
 		else
+		  log_simple_pre "$resource_path"
 			server_id=$(do_upload_file "$resource_path" "$dir_id")
+      log_simple_post "$server_id"
 		fi
 
-		debug_log "$resource_path" "processed (recieved id $server_id)!"
+		log_debug "$resource_path" "PROCESSED CHILD ELEMENT $resource_path (got server id $server_id)"
 	done
 
-	log "$dir_path" "Uploaded directory into $owner_dir_id!"
+	log_verbose "$dir_path" "PROCESSED DIRECTORY $owner_dir_id!"
 	echo "$dir_id"
 	return 0
 }
@@ -216,9 +282,7 @@ function do_download_file() {
   local owner_dir_path=$2
   local file_info=$3
 
-  debug_log "$owner_dir_path/???" "downloading server file $file_log"
   local base_file_name=$(echo "$file_info" | jq ".plainName" | tr -d '\"')
-  local file_type=$(echo "$file_info" | jq ".type" | tr -d '\"')
 
   local file_name=""
   if [ -z "$file_type" ] || [ "$file_type" == "null" ] ; then
@@ -228,42 +292,42 @@ function do_download_file() {
   fi
 
   local file_path="$owner_dir_path/$file_name"
-  log "$file_path" "DOWNLOADING FILE $file_name for $file_id ..."
+  log_verbose "$file_path" "DOWNLOADING SERVER FILE $file_id as $file_name into $owner_dir_path ..."
 
   local response
   response=$(exec_cli_command "$file_path" download-file "--id=$file_id" "--directory=$owner_dir_path" "--overwrite")
 
-  local error_code=$?
+	local error_code=$?
 	if [ $error_code != 0 ] ; then
+	  # error/warning already logged
 	  return $error_code
 	fi
 
   echo "$file_path"
-  log "$file_path" "DOWNLOADED FILE!"
+  log_verbose "$file_path" "DOWNLOADED SERVER FILE $file_id as $file_name ..."
   return 0
 }
 
 # "Downloads" (creates new local directory) the specified directory. Echoes its path, returns error code.
-function do_download_directory_recursivelly() {
+function do_download_directory() {
   local dir_id=$1
   local owner_dir_path=$2
   local dir_info=$3
 
-  debug_log "$owner_dir_path/???" "downloading server directory $dir_log"
-
   local dir_name=$(echo "$dir_info" | jq ".plainName" | tr -d '\"')
   local dir_path="$owner_dir_path/$dir_name"
 
-  log "$dir_path" "CREATING $dir_name for $dir_id ..."
+  log_verbose "$dir_path" "CREATING $dir_name for server $dir_id ..."
 
   mkdir "$dir_path"
-  local error_code=$?
+
+	local error_code=$?
 	if [ $error_code != 0 ] ; then
-	  return $error_code
+	  log_error_or_warning "$dir_path" "ERROR (mkdir: $error_code): Directory creation failed."
 	fi
 
   echo "$dir_path"
-  log "$dir_path" "CREATED DIRECTORY!"
+  log_verbose "$dir_path" "CREATED DIRECTORY $dir_name as $dir_path!"
 }
 
 # Walks recursivelly the server directory structure and downloads all files and directories inside.
@@ -272,31 +336,38 @@ function download_directory_recursivelly() {
   local dir_path=$1
 	local dir_id=$2
 
-  log "$dir_path" "Downloading contents of server directory $dir_id into $dir_path ..."
+  log_verbose "$dir_path" "Downloading contents of server directory $dir_id into $dir_path ..."
   local directory_contents_response
   directory_contents_response=$(exec_cli_command "$dir_path" list --id "$dir_id")
   local error_code=$?
 
 	if [ $error_code != 0 ] ; then
-    log "$dir_path" "Cannot download because I don't know contents of the directory. Skipping."
+    log_verbose "$dir_path" "Cannot download because I don't know contents of the directory. Skipping."
 	  return $error_code
 	fi
 
   child_files_ids=$(echo "$directory_contents_response" | jq ".list.files[].uuid" | tr -d '\"')
   for child_file_id in $child_files_ids; do
+      log_debug "$dir_path/???" "PROCESSING CHILD FILE $child_file_id ..."
+
       file_info=$(echo "$directory_contents_response" | jq ".list.files[] | select(.uuid==\"$child_file_id\")")
-      local x_file_id=$(do_download_file "$child_file_id" "$dir_path" "$file_info")
+      local child_file_path=$(do_download_file "$child_file_id" "$dir_path" "$file_info")
+
+      log_debug "$dir_path/???" "PROCESSED CHILD FILE $child_file_id as $child_file_path!"
   done
 
   local child_dirs_ids=$(echo "$directory_contents_response" | jq ".list.folders[].uuid" | tr -d '\"')
   for child_dir_id in $child_dirs_ids; do
+    log_debug "$dir_path/???" "PROCESSING CHILD DIRECTORY $child_dir_id ..."
+
     local dir_info=$(echo "$directory_contents_response" | jq ".list.folders[] | select(.uuid==\"$child_dir_id\")")
-    local child_dir_path=$(do_download_directory_recursivelly "$child_dir_id" "$dir_path" "$dir_info")
+    local child_dir_path=$(do_download_directory "$child_dir_id" "$dir_path" "$dir_info")
 
     download_directory_recursivelly "$child_dir_path" "$child_dir_id"
+    log_debug "$dir_path/???" "PROCESSED CHILD DIRECTORY $child_dir_id as $child_dir_path!"
   done
 
-  log "$dir_path" "Downloaded contents!"
+  log_verbose "$dir_path" "Downloaded contents of the $dir_id directory!"
 }
 
 
