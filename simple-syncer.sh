@@ -21,7 +21,7 @@ INTERNXT_DRIVE_URL="https://drive.internxt.com"
 ########################################################################################################################
 # logging
 
-LOGGING_VERBOCITY="quiet" # "quiet", "simple", "verbose" or debug"
+LOGGING_VERBOCITY="simple" # "quiet", "simple", "verbose" or debug"
 
 function log_to_file() {
 	local message=$*
@@ -374,16 +374,36 @@ function download_directory_recursivelly() {
 ########################################################################################################################
 # command line arguments processing
 
-if [ "$#" != "3" ] || [ "$0" == "-h" ] || [ "$0" == "--help" ] ; then
-	echo "Usage: $0 [up|down] [ROOT_DIR_SERVER_ID] [ROOT_DIR_LOCAL_PATH]"
-	echo "for example $0 up '3454-332d-34ad-444b' ~/stuff/something"
+# usage
+if [ "$#" -lt "3" ] || [ "$0" == "-h" ] || [ "$0" == "--help" ] ; then
+	echo "Usage: $0 [--debug|-D | --verbose|-V | --quiet|-Q] up|down ROOT_DIR_SERVER_ID ROOT_DIR_LOCAL_PATH"
+	echo "(please keep this order)"
+	echo "for example $0 -debug up '3454-332d-34ad-444b' ~/stuff/something"
 	exit
 fi
 
+# logging level
+case $1 in
+  "--debug" | "-D")
+    LOGGING_VERBOCITY="debug"
+    shift
+  ;;
+  "--verbose" | "-V")
+    LOGGING_VERBOCITY="verbose"
+    shift
+  ;;
+  "--quiet" | "-Q")
+    LOGGING_VERBOCITY="quiet"
+    shift
+  ;;
+esac
+
+# actual arguments
 ACTION=$1
 ROOT_DIR_SERVER_ID=$2
 ROOT_DIR_LOCAL_PATH=$3
 
+# validation of theese
 if ! [[ "$ROOT_DIR_SERVER_ID" =~ ^([0-9a-f]{4,}\-){4,}([0-9a-f]{4,})$ ]] ; then
   echo "$ROOT_DIR_SERVER_ID doesn't seem to be valid server uuid." >&2
 	exit 11
@@ -394,6 +414,7 @@ if [ ! -d "$ROOT_DIR_LOCAL_PATH" ] ; then
 	exit 12
 fi
 
+# actually executing the action
 case $ACTION in
   up|upload)
     dir_id=$(upload_directory_recursivelly "$ROOT_DIR_LOCAL_PATH" "$ROOT_DIR_SERVER_ID")
